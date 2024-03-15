@@ -17,7 +17,7 @@ Create a virtual environment `python3 -m venv tb2wh-env`
 
 Activate the virtual environment `source tb2wh-env/bin/activate`
 
-Install the dependencies `pip install requirements.txt`
+Install the dependencies `pip install -r requirements.txt`
 
 # Prepare the Inputs
 Download the CSV exports for sick and vacation days from timebutler, place them inside the /inputs directory

@@ -15,6 +15,17 @@ def date_range_includes(df, date):
             return row['Halber Tag']
     return None
 
+def generate_weights(length):
+    midpoint = length / 2
+    weights = [(x - midpoint)**2 for x in range(length)]
+    max_weight = max(weights)
+    # Invert weights since we want a bell curve (lower quadratic values for the center)
+    weights = [max_weight - weight for weight in weights]
+    # Normalize weights to make them more manageable
+    total_weight = sum(weights)
+    weights = [weight / total_weight for weight in weights]
+    return weights
+
 def calculate_work_hours(firstdate, lastdate, sick_days_csv, vacation_days_csv, state_code):
     sick_days = read_csv_with_dates(sick_days_csv)
     vacation_days = read_csv_with_dates(vacation_days_csv)
@@ -28,15 +39,22 @@ def calculate_work_hours(firstdate, lastdate, sick_days_csv, vacation_days_csv, 
     
     # Generate all possible start times and break durations
     start_times = [datetime(start_date.year, start_date.month, start_date.day, hour, minute)
-                   for hour in range(7, 9) for minute in (0, 15, 30, 45)]
+                   for hour in range(7, 10) for minute in (0, 15, 30, 45)]
     break_durations = [0.5, 0.75, 1.0]
+
+    # Generate the weights for start_times to have a more natural distribution
+    weights_start_times = generate_weights(len(start_times))
+    # Manually assign weights for break durations
+    weights_break_durations = [0.7, 0.2, 0.1]
+
+    # TODO: Add assignment of start_times and break_durations according to weights!
     
     current_date = start_date
     while current_date <= end_date:
         date_str = current_date.strftime('%Y-%m-%d')
         weekday = current_date.strftime('%A')
         hours_worked = 8
-        hours_break = random.choice(break_durations)  # Randomly choose the break duration
+        hours_break = random.choices(break_durations, weights_break_durations, k=1)[0]  # Randomly choose the break duration based on assigned weights
         work_start = None
         work_end = None
         break_start = None
@@ -44,8 +62,8 @@ def calculate_work_hours(firstdate, lastdate, sick_days_csv, vacation_days_csv, 
         comment = 'regular work day'
         
         if current_date.weekday() < 5 and date_str not in de_holidays:
-            # Randomly choose the work start time for weekdays that are not public holidays
-            work_start = random.choice(start_times)
+            # Randomly choose the work start time based on assigned weights for weekdays that are not public holidays
+            work_start = random.choices(start_times, weights_start_times, k=1)[0]
             work_start = work_start.replace(year=current_date.year, month=current_date.month, day=current_date.day)
             
             if hours_worked > 0:

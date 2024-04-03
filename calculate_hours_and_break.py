@@ -23,7 +23,7 @@ def calculate_work_hours(firstdate, lastdate, sick_days_csv, vacation_days_csv, 
     
     de_holidays = holidays.Germany(prov=state_code)
     
-    output = pd.DataFrame(columns=['date', 'weekday', 'hours worked', 'hours break', 'comment'])
+    output = pd.DataFrame(columns=['date', 'weekday', 'hours worked', 'hours break', 'work_start', 'work_end', 'break_start', 'break_end', 'comment'])
     
     current_date = start_date
     while current_date <= end_date:
@@ -31,6 +31,10 @@ def calculate_work_hours(firstdate, lastdate, sick_days_csv, vacation_days_csv, 
         weekday = current_date.strftime('%A')
         hours_worked = 8
         hours_break = 0.5
+        work_start = None
+        work_end = None
+        break_start = None
+        break_end = None
         comment = 'regular work day'
         
         if current_date.weekday() >= 5:
@@ -64,18 +68,28 @@ def calculate_work_hours(firstdate, lastdate, sick_days_csv, vacation_days_csv, 
                 else:
                     hours_break = 0
                     hours_worked = 0
-            else:
-                hours_worked = 8
-                hours_break = 0.5
+
+        # Calculate start and end times
+        if hours_worked > 0:
+            work_start = datetime(current_date.year, current_date.month, current_date.day, 8, 0)  # 8 AM CEST
+            work_end = work_start + timedelta(hours=hours_worked + hours_break)
+        
+        if hours_worked > 4:
+            break_start = work_start + timedelta(hours=4)
+            break_end = break_start + timedelta(hours=hours_break)
         
         new_row = pd.DataFrame([{
             'date': date_str, 
             'weekday': weekday, 
             'hours worked': hours_worked, 
             'hours break': hours_break, 
+            'work_start': work_start.time() if work_start else None, 
+            'work_end': work_end.time() if work_end else None, 
+            'break_start': break_start.time() if break_start else None, 
+            'break_end': break_end.time() if break_end else None, 
             'comment': comment
         }])
-
+        
         output = pd.concat([output, new_row], ignore_index=True)
         
         current_date += timedelta(days=1)

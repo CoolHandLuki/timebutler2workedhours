@@ -1,6 +1,7 @@
 import pandas as pd
 import holidays
 from datetime import datetime, timedelta
+import random
 
 def read_csv_with_dates(csv_file):
     df = pd.read_csv(csv_file, sep=';', usecols=['Von', 'Bis', 'Halber Tag'], encoding='ISO-8859-1')
@@ -25,18 +26,36 @@ def calculate_work_hours(firstdate, lastdate, sick_days_csv, vacation_days_csv, 
     
     output = pd.DataFrame(columns=['date', 'weekday', 'hours worked', 'hours break', 'work_start', 'work_end', 'break_start', 'break_end', 'comment'])
     
+    # Generate all possible start times and break durations
+    start_times = [datetime(start_date.year, start_date.month, start_date.day, hour, minute)
+                   for hour in range(7, 9) for minute in (0, 15, 30, 45)]
+    break_durations = [0.5, 0.75, 1.0]
+    
     current_date = start_date
     while current_date <= end_date:
         date_str = current_date.strftime('%Y-%m-%d')
         weekday = current_date.strftime('%A')
         hours_worked = 8
-        hours_break = 0.5
+        hours_break = random.choice(break_durations)  # Randomly choose the break duration
         work_start = None
         work_end = None
         break_start = None
         break_end = None
         comment = 'regular work day'
         
+        if current_date.weekday() < 5 and date_str not in de_holidays:
+            # Randomly choose the work start time for weekdays that are not public holidays
+            work_start = random.choice(start_times)
+            work_start = work_start.replace(year=current_date.year, month=current_date.month, day=current_date.day)
+            
+            if hours_worked > 0:
+                work_end = work_start + timedelta(hours=hours_worked + hours_break)
+            
+            if hours_worked > 4:
+                break_start = work_start + timedelta(hours=4)  # Assuming break starts after 4 hours of work
+                break_end = break_start + timedelta(hours=hours_break)
+
+        # Adjust the comments and hours for weekends, public holidays, sick leaves, and vacations
         if current_date.weekday() >= 5:
             comment = 'weekend'
             hours_worked = 0
@@ -68,15 +87,6 @@ def calculate_work_hours(firstdate, lastdate, sick_days_csv, vacation_days_csv, 
                 else:
                     hours_break = 0
                     hours_worked = 0
-
-        # Calculate start and end times
-        if hours_worked > 0:
-            work_start = datetime(current_date.year, current_date.month, current_date.day, 8, 0)  # 8 AM CEST
-            work_end = work_start + timedelta(hours=hours_worked + hours_break)
-        
-        if hours_worked > 4:
-            break_start = work_start + timedelta(hours=4)
-            break_end = break_start + timedelta(hours=hours_break)
         
         new_row = pd.DataFrame([{
             'date': date_str, 

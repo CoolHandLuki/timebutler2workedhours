@@ -24,13 +24,12 @@ Download the CSV exports for sick and vacation days from timebutler, place them 
 
 # Adjust the code
 Open 'calculate_hours_and_break.py' and adjust the last line to fit your circumstances:
-`calculate_work_hours('2022-10-01', '2022-12-31', 'inputs/2022_sick_days.csv', 'inputs/2022_vacation_days.csv', 'BW')`
+`calculate_work_hours('2022-10-01', '2022-12-31', 'inputs/2022_sick_and_vacation_days.csv', 'BW')`
 
 The first argument is the first day (including) from which to calculate hours worked.
 The second argument is the last day (including) up to which to calculate hours worked.
-The third argument is the relative filepath to the CSV file containing the sick days.
-The fourth argument is the relative filepath to the CSV file containing the vacation days.
-The fifth argument is the country code for the German state you're in used to calculate public holidays.
+The third argument is the relative filepath to the CSV file containing the sick and vacation days.
+The fourth argument is the country code for the German state you're in used to calculate public holidays.
 
 # Run the code
 `python calculate_hours_and_break.py`

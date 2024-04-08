@@ -4,15 +4,15 @@ from datetime import datetime, timedelta
 import random
 
 def read_csv_with_dates(csv_file):
-    df = pd.read_csv(csv_file, sep=';', usecols=['Von', 'Bis', 'Halber Tag'], encoding='ISO-8859-1')
-    df['Von'] = pd.to_datetime(df['Von'], dayfirst=True)
-    df['Bis'] = pd.to_datetime(df['Bis'], dayfirst=True)
+    df = pd.read_csv(csv_file, sep=';', usecols=['From', 'To', 'Half a day', 'Type'], encoding='ISO-8859-1')
+    df['From'] = pd.to_datetime(df['From'], dayfirst=True)
+    df['To'] = pd.to_datetime(df['To'], dayfirst=True)
     return df
 
-def date_range_includes(df, date):
+def date_range_includes(df, date, type_check):
     for _, row in df.iterrows():
-        if row['Von'] <= date <= row['Bis']:
-            return row['Halber Tag']
+        if row['From'] <= date <= row['To'] and row['Type'] == type_check:
+            return row['Half a day']
     return None
 
 def generate_weights(length):
@@ -26,9 +26,8 @@ def generate_weights(length):
     weights = [weight / total_weight for weight in weights]
     return weights
 
-def calculate_work_hours(firstdate, lastdate, sick_days_csv, vacation_days_csv, state_code):
-    sick_days = read_csv_with_dates(sick_days_csv)
-    vacation_days = read_csv_with_dates(vacation_days_csv)
+def calculate_work_hours(firstdate, lastdate, days_csv, state_code):
+    days_df = read_csv_with_dates(days_csv)
     
     start_date = datetime.strptime(firstdate, '%Y-%m-%d')
     end_date = datetime.strptime(lastdate, '%Y-%m-%d')
@@ -36,7 +35,7 @@ def calculate_work_hours(firstdate, lastdate, sick_days_csv, vacation_days_csv, 
     de_holidays = holidays.Germany(prov=state_code)
     
     output = pd.DataFrame(columns=['date', 'weekday', 'hours worked', 'hours break', 'work_start', 'work_end', 'break_start', 'break_end', 'comment'])
-    
+
     # Generate all possible start times and break durations
     start_times = [datetime(start_date.year, start_date.month, start_date.day, hour, minute)
                    for hour in range(7, 10) for minute in (0, 15, 30, 45)]
@@ -46,8 +45,6 @@ def calculate_work_hours(firstdate, lastdate, sick_days_csv, vacation_days_csv, 
     weights_start_times = generate_weights(len(start_times))
     # Manually assign weights for break durations
     weights_break_durations = [0.7, 0.2, 0.1]
-
-    # TODO: Add assignment of start_times and break_durations according to weights!
     
     current_date = start_date
     while current_date <= end_date:
@@ -61,18 +58,6 @@ def calculate_work_hours(firstdate, lastdate, sick_days_csv, vacation_days_csv, 
         break_end = None
         comment = 'regular work day'
         
-        if current_date.weekday() < 5 and date_str not in de_holidays:
-            # Randomly choose the work start time based on assigned weights for weekdays that are not public holidays
-            work_start = random.choices(start_times, weights_start_times, k=1)[0]
-            work_start = work_start.replace(year=current_date.year, month=current_date.month, day=current_date.day)
-            
-            if hours_worked > 0:
-                work_end = work_start + timedelta(hours=hours_worked + hours_break)
-            
-            if hours_worked > 4:
-                break_start = work_start + timedelta(hours=4)  # Assuming break starts after 4 hours of work
-                break_end = break_start + timedelta(hours=hours_break)
-
         # Adjust the comments and hours for weekends, public holidays, sick leaves, and vacations
         if current_date.weekday() >= 5:
             comment = 'weekend'
@@ -83,28 +68,33 @@ def calculate_work_hours(firstdate, lastdate, sick_days_csv, vacation_days_csv, 
             hours_worked = 0
             hours_break = 0
         else:
-            sick_day_type = date_range_includes(sick_days, current_date)
-            vacation_day_type = date_range_includes(vacation_days, current_date)
+            # Check and adjust for sick leave or vacation days
+            sick_day_type = date_range_includes(days_df, current_date, 'Illness') or date_range_includes(days_df, current_date, 'Child ill')
+            vacation_day_type = date_range_includes(days_df, current_date, 'Vacation') or date_range_includes(days_df, current_date, 'Company Holidays') or date_range_includes(days_df, current_date, 'Further training')
 
-            if sick_day_type is not None:
-                comment = 'sick leave'
-                if sick_day_type == 'ja':
-                    comment += ' (half day)'
-                    hours_break = 0
+            if sick_day_type is not None or vacation_day_type is not None:
+                hours_break = 0
+                if sick_day_type is not None:
+                    comment = 'sick leave'
+                elif vacation_day_type is not None:
+                    comment = 'vacation'
+                if sick_day_type == 'yes' or vacation_day_type == 'yes':
                     hours_worked = 4
+                    comment += '(half day)'
                 else:
-                    hours_break = 0
                     hours_worked = 0
-                    
-            elif vacation_day_type is not None:
-                comment = 'vacation'
-                if vacation_day_type == 'ja':
-                    comment += ' (half day)'
-                    hours_break = 0
-                    hours_worked = 4
-                else:
-                    hours_break = 0
-                    hours_worked = 0
+
+        if current_date.weekday() < 5 and date_str not in de_holidays:
+            # Randomly choose the work start time based on assigned weights for weekdays that are not public holidays
+            
+            if hours_worked > 0:
+                work_start = random.choices(start_times, weights_start_times, k=1)[0]
+                work_start = work_start.replace(year=current_date.year, month=current_date.month, day=current_date.day)
+                work_end = work_start + timedelta(hours=hours_worked + hours_break)
+            
+            if hours_worked > 4:
+                break_start = work_start + timedelta(hours=4)  # Assuming break starts after 4 hours of work
+                break_end = break_start + timedelta(hours=hours_break)
         
         new_row = pd.DataFrame([{
             'date': date_str, 
@@ -125,4 +115,4 @@ def calculate_work_hours(firstdate, lastdate, sick_days_csv, vacation_days_csv, 
     output.to_csv('outputs/work_hours_report.csv', index=False)
 
 # Example usage
-calculate_work_hours('2022-10-01', '2022-12-31', 'inputs/2022_sick_days.csv', 'inputs/2022_vacation_days.csv', 'BW')
+calculate_work_hours('2024-01-01', '2024-02-29', 'inputs/2024_sick_and_vacation_days.csv', 'BW')
